@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnonLink — No-Number Chat & P2P Calls</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root { --bg:#0f172a; --panel:#1e293b; --panel-2:#0b1120; --border:#334155; --text:#f8fafc; --muted:#94a3b8; --accent:#6366f1; --accent-hover:#4f46e5; --green:#10b981; --red:#ef4444; }
+    * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,sans-serif; }
+    body { background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+    #lobby { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:32px; width:100%; max-width:420px; box-shadow:0 20px 40px rgba(0,0,0,.4); }
+    .badge { display:inline-block; background:rgba(99,102,241,.15); color:#a5b4fc; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:600; margin-bottom:12px; }
+    h1 { font-size:26px; margin-bottom:8px; } .subtitle { color:var(--muted); font-size:14px; margin-bottom:24px; line-height:1.5; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+    input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:15px; margin-bottom:16px; outline:none; }
+    input:focus { border-color:var(--accent); }
+    button { cursor:pointer; border:none; border-radius:10px; font-weight:600; font-size:14px; padding:12px 16px; transition:.15s; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .btn-primary { background:var(--accent); color:white; width:100%; } .btn-primary:hover { background:var(--accent-hover); }
+    .btn-secondary { background:var(--panel-2); color:var(--text); border:1px solid var(--border); } .btn-secondary:hover { border-color:var(--muted); }
+    .btn-green { background:var(--green); color:#052e16; } .btn-red { background:var(--red); color:white; }
+    .divider { text-align:center; color:var(--muted); font-size:12px; margin:16px 0; } .join-row { display:flex; gap:8px; } .join-row input { margin-bottom:0; text-transform:uppercase; }
+    #room { display:none; flex:1; flex-direction:column; height:100vh; }
+    header { background:var(--panel); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .room-meta { display:flex; align-items:center; gap:12px; } .status-dot { width:10px; height:10px; border-radius:50%; background:var(--green); }
+    .room-code { font-family:monospace; font-size:16px; font-weight:700; color:#a5b4fc; } .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    #call-stage { display:none; background:#020617; border-bottom:1px solid var(--border); padding:16px; flex-direction:column; align-items:center; gap:12px; }
+    .video-grid { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; width:100%; max-width:900px; }
+    .video-box { position:relative; background:var(--panel); border-radius:12px; overflow:hidden; width:100%; max-width:400px; aspect-ratio:16/9; border:1px solid var(--border); }
+    video { width:100%; height:100%; object-fit:cover; background:#000; } .video-label { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,.65); padding:4px 10px; border-radius:6px; font-size:12px; }
+    .call-controls { display:flex; gap:10px; } #incoming-banner { display:none; background:#1e1b4b; border-bottom:1px solid var(--accent); padding:12px 20px; align-items:center; justify-content:space-between; }
+    #messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:12px; }
+    .msg { max-width:75%; padding:10px 14px; border-radius:14px; font-size:14px; line-height:1.45; word-wrap:break-word; }
+    .msg.me { align-self:flex-end; background:var(--accent); color:white; border-bottom-right-radius:4px; } .msg.peer { align-self:flex-start; background:var(--panel); border:1px solid var(--border); border-bottom-left-radius:4px; }
+    .msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:12px; } .msg-sender { font-size:11px; opacity:.75; margin-bottom:4px; font-weight:600; }
+    form#chat-form { background:var(--panel); border-top:1px solid var(--border); padding:12px 20px; display:flex; gap:10px; } #msg-input { margin-bottom:0; flex:1; }
+  </style>
+</head>
+<body>
+  <div id="lobby">
+    <div class="card">
+      <span class="badge">100% Anonymous • No Phone Number</span>
+      <h1>AnonLink</h1>
+      <p class="subtitle">Instant peer-to-peer chat, voice, and video calls directly in your browser. Share your Room ID to connect.</p>
+      <label for="nickname">Your Alias</label>
+      <input id="nickname" type="text" placeholder="e.g. GhostRider" maxlength="20" />
+      <button class="btn-primary" onclick="createRoom()">Create New Room</button>
+      <div class="divider">OR JOIN WITH ROOM CODE</div>
+      <div class="join-row">
+        <input id="join-code" type="text" placeholder="ANON-XXXXXX" maxlength="11" />
+        <button class="btn-secondary" onclick="joinRoom()">Join</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="room">
+    <header>
+      <div class="room-meta">
+        <div class="status-dot" id="conn-dot"></div>
+        <div><div class="room-code" id="display-code">ANON-000000</div><div style="font-size:12px;color:var(--muted)" id="peer-status">Waiting for peer to join...</div></div>
+      </div>
+      <div class="actions">
+        <button class="btn-secondary" onclick="copyInvite()">Copy Invite Link</button>
+        <button class="btn-green" onclick="startCall(false)">Voice Call</button>
+        <button class="btn-primary" style="width:auto" onclick="startCall(true)">Video Call</button>
+        <button class="btn-red" onclick="leaveRoom()">Leave</button>
+      </div>
+    </header>
+
+    <div id="incoming-banner">
+      <span id="incoming-text">Incoming call...</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-green" onclick="acceptCall()">Accept</button>
+        <button class="btn-red" onclick="rejectCall()">Decline</button>
+      </div>
+    </div>
+
+    <div id="call-stage">
+      <div class="video-grid">
+        <div class="video-box"><video id="local-video" autoplay muted playsinline></video><div class="video-label">You</div></div>
+        <div class="video-box"><video id="remote-video" autoplay playsinline></video><div class="video-label" id="remote-label">Peer</div></div>
+      </div>
+      <div class="call-controls">
+        <button class="btn-secondary" id="mute-btn" onclick="toggleMute()">Mute Mic</button>
+        <button class="btn-secondary" id="cam-btn" onclick="toggleCam()">Toggle Cam</button>
+        <button class="btn-red" onclick="endCall()">End Call</button>
+      </div>
+    </div>
+
+    <div id="messages"></div>
+    <form id="chat-form" onsubmit="sendMessage(event)">
+      <input id="msg-input" type="text" placeholder="Type a P2P message..." autocomplete="off" />
+      <button type="submit" class="btn-primary" style="width:auto">Send</button>
+    </form>
+  </div>
+
+  <script>
+    let peer=null, dataConn=null, mediaCall=null, incomingCallObj=null, localStream=null;
+    let myName="Anon", roomCode="", isHost=false, broadcast=null;
+
+    window.addEventListener("DOMContentLoaded",()=>{
+      const code=new URLSearchParams(window.location.search).get("room");
+      if(code) document.getElementById("join-code").value=code.toUpperCase();
+    });
+
+    function getAlias(){ const val=document.getElementById("nickname").value.trim(); return val||"Anon-"+Math.floor(100+Math.random()*900); }
+    function generateCode(){ const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let res="ANON-"; for(let i=0;i<6;i++)res+=chars[Math.floor(Math.random()*chars.length)]; return res; }
+
+    function createRoom(){ myName=getAlias(); roomCode=generateCode(); isHost=true; initSession(); }
+    function joinRoom(){ const input=document.getElementById("join-code").value.trim().toUpperCase(); if(!input)return alert("Enter a Room ID first."); myName=getAlias(); roomCode=input; isHost=false; initSession(); }
+
+    function initSession(){
+      document.getElementById("lobby").style.display="none"; document.getElementById("room").style.display="flex"; document.getElementById("display-code").textContent=roomCode;
+      broadcast=new BroadcastChannel("anonlink_"+roomCode);
+      broadcast.onmessage=e=>{ if(e.data.type==="chat") appendMsg(e.data.sender,e.data.text,"peer"); };
+      peer=new Peer(isHost?roomCode:undefined);
+      peer.on("open",()=>{ addSystemMsg(`Connected as ${myName}. Share Room ID: ${roomCode}`); if(!isHost)setupDataConn(peer.connect(roomCode,{metadata:{name:myName}})); });
+      peer.on("connection",setupDataConn);
+      peer.on("call",call=>{ incomingCallObj=call; document.getElementById("incoming-text").textContent=`Incoming call from ${call.metadata?.name||"Peer"}...`; document.getElementById("incoming-banner").style.display="flex"; });
+      peer.on("error",err=>addSystemMsg("Connection notice: "+err.type));
+    }
+
+    function setupDataConn(conn){
+      dataConn=conn;
+      conn.on("open",()=>{ document.getElementById("peer-status").textContent="Peer connected (P2P)"; addSystemMsg("Peer joined the room."); conn.send({type:"intro",name:myName}); });
+      conn.on("data",data=>{ if(data.type==="intro"){ document.getElementById("peer-status").textContent=`Connected with ${data.name}`; document.getElementById("remote-label").textContent=data.name; } else if(data.type==="chat")appendMsg(data.sender,data.text,"peer"); });
+      conn.on("close",()=>{ document.getElementById("peer-status").textContent="Peer disconnected"; addSystemMsg("Peer left the room."); });
+    }
+
+    function sendMessage(e){
+      e.preventDefault(); const input=document.getElementById("msg-input"); const text=input.value.trim(); if(!text)return;
+      appendMsg(myName,text,"me"); if(dataConn&&dataConn.open)dataConn.send({type:"chat",sender:myName,text}); if(broadcast)broadcast.postMessage({type:"chat",sender:myName,text}); input.value="";
+    }
+
+    function appendMsg(sender,text,cls){ const box=document.getElementById("messages"); const div=document.createElement("div"); div.className=`msg ${cls}`; div.innerHTML=`<div class="msg-sender">${escapeHtml(sender)}</div><div>${escapeHtml(text)}</div>`; box.appendChild(div); box.scrollTop=box.scrollHeight; }
+    function addSystemMsg(text){ const box=document.getElementById("messages"); const div=document.createElement("div"); div.className="msg sys"; div.textContent=text; box.appendChild(div); box.scrollTop=box.scrollHeight; }
+
+    async function startCall(withVideo){
+      if(!dataConn||!dataConn.open)return alert("Wait for a peer to join your room before starting a call.");
+      try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:withVideo}); showCallStage(localStream); bindMediaCall(peer.call(dataConn.peer,localStream,{metadata:{name:myName,video:withVideo}})); }
+      catch(err){ alert("Microphone/Camera permission denied or unavailable: "+err.message); }
+    }
+
+    async function acceptCall(){
+      document.getElementById("incoming-banner").style.display="none"; if(!incomingCallObj)return;
+      const withVideo=incomingCallObj.metadata?.video??true;
+      try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:withVideo}); showCallStage(localStream); incomingCallObj.answer(localStream); bindMediaCall(incomingCallObj); }
+      catch(err){ alert("Could not access microphone/camera: "+err.message); }
+    }
+
+    function rejectCall(){ document.getElementById("incoming-banner").style.display="none"; if(incomingCallObj)incomingCallObj.close(); incomingCallObj=null; }
+    function bindMediaCall(call){ mediaCall=call; call.on("stream",remoteStream=>document.getElementById("remote-video").srcObject=remoteStream); call.on("close",endCall); }
+    function showCallStage(stream){ document.getElementById("call-stage").style.display="flex"; document.getElementById("local-video").srcObject=stream; }
+
+    function endCall(){
+      if(mediaCall)mediaCall.close(); if(localStream)localStream.getTracks().forEach(t=>t.stop()); mediaCall=null; localStream=null;
+      document.getElementById("call-stage").style.display="none"; document.getElementById("local-video").srcObject=null; document.getElementById("remote-video").srcObject=null;
+    }
+
+    function toggleMute(){ if(!localStream)return; const track=localStream.getAudioTracks()[0]; if(track){ track.enabled=!track.enabled; document.getElementById("mute-btn").textContent=track.enabled?"Mute Mic":"Unmute Mic"; } }
+    function toggleCam(){ if(!localStream)return; const track=localStream.getVideoTracks()[0]; if(track){ track.enabled=!track.enabled; document.getElementById("cam-btn").textContent=track.enabled?"Toggle Cam":"Cam Off"; } }
+
+    function copyInvite(){ const url=`${window.location.origin}${window.location.pathname}?room=${roomCode}`; navigator.clipboard.writeText(url).then(()=>addSystemMsg("Invite link copied to clipboard!")); }
+    function leaveRoom(){ endCall(); if(peer)peer.destroy(); window.location.href=window.location.pathname; }
+    function escapeHtml(str){ return str.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m])); }
+  </script>
+</body>
+</html>
