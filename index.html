@@ -4,61 +4,86 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>AnonLink — No-Number Chat & P2P Calls</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
   <style>
-    :root { --bg:#0f172a; --panel:#1e293b; --panel-2:#0b1120; --border:#334155; --text:#f8fafc; --muted:#94a3b8; --accent:#6366f1; --accent-hover:#4f46e5; --green:#10b981; --red:#ef4444; }
+    :root {
+      color-scheme: dark;
+      --bg:#0f172a; --panel:#1e293b; --panel-2:#0b1120; --border:#334155;
+      --text:#f8fafc; --muted:#94a3b8; --accent:#6366f1; --accent-hover:#4f46e5;
+      --green:#10b981; --red:#ef4444; --app-height:100vh;
+    }
     * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     html, body { width:100%; height:100%; }
-    body { background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-    @supports (height: 100dvh) { body { height:100dvh; } }
-    #lobby { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:20px; padding-top:max(20px,env(safe-area-inset-top)); padding-bottom:max(20px,env(safe-area-inset-bottom)); overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:32px; width:100%; max-width:420px; box-shadow:0 20px 40px rgba(0,0,0,.4); }
-    .badge { display:inline-block; background:rgba(99,102,241,.15); color:#a5b4fc; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:600; margin-bottom:12px; }
-    h1 { font-size:26px; margin-bottom:8px; } .subtitle { color:var(--muted); font-size:14px; margin-bottom:24px; line-height:1.5; }
-    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:500; }
-    input { appearance:none; -webkit-appearance:none; width:100%; min-width:0; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:16px; margin-bottom:16px; outline:none; }
+    body { height:var(--app-height); min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--bg); color:var(--text); }
+    @supports (height:100dvh) { :root { --app-height:100dvh; } }
+    #lobby { flex:1; min-height:0; overflow-y:auto; display:flex; align-items:center; justify-content:center; padding:20px; padding-top:max(20px,env(safe-area-inset-top)); padding-bottom:max(20px,env(safe-area-inset-bottom)); }
+    .card { width:100%; max-width:420px; padding:32px; border:1px solid var(--border); border-radius:16px; background:var(--panel); box-shadow:0 20px 40px rgba(0,0,0,.4); }
+    .badge { display:inline-block; margin-bottom:12px; padding:4px 12px; border-radius:999px; background:rgba(99,102,241,.15); color:#a5b4fc; font-size:12px; font-weight:600; }
+    h1 { margin-bottom:8px; font-size:26px; }
+    .subtitle { margin-bottom:24px; color:var(--muted); font-size:14px; line-height:1.5; }
+    label { display:block; margin-bottom:6px; color:var(--muted); font-size:13px; font-weight:500; }
+    input { appearance:none; -webkit-appearance:none; width:100%; min-width:0; min-height:44px; margin-bottom:16px; padding:11px 14px; border:1px solid var(--border); border-radius:10px; outline:none; background:var(--panel-2); color:var(--text); font-size:16px; }
     input:focus { border-color:var(--accent); }
-    button { -webkit-appearance:none; appearance:none; cursor:pointer; touch-action:manipulation; border:none; border-radius:10px; font-weight:600; font-size:16px; min-height:44px; padding:11px 16px; transition:background-color .15s,border-color .15s; display:inline-flex; align-items:center; justify-content:center; gap:8px; white-space:nowrap; }
+    button { appearance:none; -webkit-appearance:none; min-height:44px; padding:11px 16px; border:0; border-radius:10px; color:var(--text); font-size:16px; font-weight:600; cursor:pointer; touch-action:manipulation; }
     button:disabled { opacity:.55; cursor:default; }
-    .btn-primary { background:var(--accent); color:white; width:100%; } .btn-primary:hover { background:var(--accent-hover); }
-    .btn-secondary { background:var(--panel-2); color:var(--text); border:1px solid var(--border); } .btn-secondary:hover { border-color:var(--muted); }
-    .btn-green { background:var(--green); color:#052e16; } .btn-red { background:var(--red); color:white; }
-    .divider { text-align:center; color:var(--muted); font-size:12px; margin:16px 0; } .join-row { display:flex; gap:8px; } .join-row input { margin-bottom:0; text-transform:uppercase; }
-    #room { display:none; flex:1; min-height:0; flex-direction:column; height:100vh; }
-    @supports (height: 100dvh) { #room { height:100dvh; } }
-    header { flex:none; background:var(--panel); border-bottom:1px solid var(--border); padding:12px 16px; padding-top:max(12px,env(safe-area-inset-top)); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
-    .room-meta { display:flex; align-items:center; gap:12px; min-width:0; } .status-dot { flex:none; width:10px; height:10px; border-radius:50%; background:var(--green); } .status-dot.offline { background:var(--red); }
-    .room-code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:16px; font-weight:700; color:#a5b4fc; } .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    #call-stage { display:none; flex:none; background:#020617; border-bottom:1px solid var(--border); padding:12px; flex-direction:column; align-items:center; gap:12px; max-height:48%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    .video-grid { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; width:100%; max-width:900px; }
-    .video-box { position:relative; background:var(--panel); border-radius:12px; overflow:hidden; width:100%; max-width:400px; aspect-ratio:16/9; border:1px solid var(--border); }
-    video { display:block; width:100%; height:100%; object-fit:cover; background:#000; } .video-label { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,.65); padding:4px 10px; border-radius:6px; font-size:12px; }
-    .call-controls { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; } #incoming-banner { display:none; flex:none; background:#1e1b4b; border-bottom:1px solid var(--accent); padding:12px 16px; align-items:center; justify-content:space-between; gap:12px; }
-    #messages { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:16px; display:flex; flex-direction:column; gap:12px; }
+    .btn-primary { width:100%; background:var(--accent); color:#fff; }
+    .btn-primary:hover { background:var(--accent-hover); }
+    .btn-secondary { border:1px solid var(--border); background:var(--panel-2); }
+    .btn-secondary:hover { border-color:var(--muted); }
+    .btn-green { background:var(--green); color:#052e16; }
+    .btn-red { background:var(--red); color:#fff; }
+    .divider { margin:16px 0; color:var(--muted); font-size:12px; text-align:center; }
+    .join-row { display:flex; gap:8px; }
+    .join-row input { margin-bottom:0; text-transform:uppercase; }
+    #room { display:none; flex:1; min-height:0; height:var(--app-height); flex-direction:column; }
+    header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; padding-top:max(12px,env(safe-area-inset-top)); border-bottom:1px solid var(--border); background:var(--panel); }
+    .room-meta { display:flex; min-width:0; align-items:center; gap:12px; }
+    .status-dot { flex:none; width:10px; height:10px; border-radius:50%; background:var(--green); }
+    .status-dot.offline { background:var(--red); }
+    .room-code { color:#a5b4fc; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:16px; font-weight:700; }
+    #peer-status { color:var(--muted); font-size:12px; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; }
+    #call-stage { display:none; flex:none; max-height:48%; overflow-y:auto; flex-direction:column; align-items:center; gap:12px; padding:12px; border-bottom:1px solid var(--border); background:#020617; }
+    .video-grid { display:flex; width:100%; max-width:900px; flex-wrap:wrap; justify-content:center; gap:12px; }
+    .video-box { position:relative; width:100%; max-width:400px; aspect-ratio:16/9; overflow:hidden; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+    video { display:block; width:100%; height:100%; object-fit:cover; background:#000; }
+    .video-label { position:absolute; bottom:8px; left:8px; padding:4px 10px; border-radius:6px; background:rgba(0,0,0,.65); font-size:12px; }
+    .call-controls { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+    #incoming-banner { display:none; flex:none; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--accent); background:#1e1b4b; }
+    #messages { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:12px; padding:16px; }
     .msg { max-width:85%; padding:10px 14px; border-radius:14px; font-size:15px; line-height:1.45; overflow-wrap:anywhere; white-space:pre-wrap; }
-    .msg.me { align-self:flex-end; background:var(--accent); color:white; border-bottom-right-radius:4px; } .msg.peer { align-self:flex-start; background:var(--panel); border:1px solid var(--border); border-bottom-left-radius:4px; }
-    .msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:12px; text-align:center; } .msg-sender { font-size:11px; opacity:.75; margin-bottom:4px; font-weight:600; }
-    form#chat-form { flex:none; background:var(--panel); border-top:1px solid var(--border); padding:10px 12px; padding-bottom:max(10px,env(safe-area-inset-bottom)); display:flex; gap:8px; align-items:center; } #msg-input { margin-bottom:0; flex:1; }
+    .msg.me { align-self:flex-end; border-bottom-right-radius:4px; background:var(--accent); color:#fff; }
+    .msg.peer { align-self:flex-start; border:1px solid var(--border); border-bottom-left-radius:4px; background:var(--panel); }
+    .msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:12px; text-align:center; }
+    .msg-sender { margin-bottom:4px; font-size:11px; font-weight:600; opacity:.75; }
+    form#chat-form { flex:none; display:flex; align-items:center; gap:8px; padding:10px 12px; padding-bottom:max(10px,env(safe-area-inset-bottom)); border-top:1px solid var(--border); background:var(--panel); }
+    #msg-input { flex:1; margin:0; }
     @media (max-width:600px) {
       .card { padding:24px; }
-      header { align-items:flex-start; }
-      .actions { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .actions button { width:100% !important; white-space:normal; padding-left:8px; padding-right:8px; }
+      header { align-items:flex-start; flex-direction:column; }
+      .actions { display:grid; width:100%; grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .actions button { width:100% !important; padding-right:8px; padding-left:8px; white-space:normal; }
       #incoming-banner { align-items:flex-start; flex-direction:column; }
-      #incoming-banner > div { width:100%; }
+      #incoming-banner > div { display:flex; width:100%; }
       #incoming-banner button { flex:1; }
       .video-box { max-width:none; }
       .msg { max-width:92%; }
+    }
+    @media (max-height:520px) and (orientation:landscape) {
+      #call-stage { max-height:38%; }
+      .video-box { max-width:32vw; }
     }
   </style>
 </head>
 <body>
   <div id="lobby">
     <div class="card">
-      <span class="badge">100% Anonymous • No Phone Number</span>
+      <span class="badge">No phone number required</span>
       <h1>AnonLink</h1>
-      <p class="subtitle">Instant peer-to-peer chat, voice, and video calls directly in your browser. Share your Room ID to connect.</p>
+      <p class="subtitle">Peer-to-peer chat, voice, and video calls in your browser. Share your Room ID to connect. Calls need HTTPS and microphone/camera permission.</p>
       <label for="nickname">Your Alias</label>
       <input id="nickname" type="text" placeholder="e.g. GhostRider" maxlength="20" autocomplete="nickname" />
       <button class="btn-primary" type="button" onclick="createRoom()">Create New Room</button>
@@ -74,7 +99,7 @@
     <header>
       <div class="room-meta">
         <div class="status-dot" id="conn-dot"></div>
-        <div><div class="room-code" id="display-code">ANON-000000</div><div style="font-size:12px;color:var(--muted)" id="peer-status">Waiting for peer to join...</div></div>
+        <div><div class="room-code" id="display-code">ANON-000000</div><div id="peer-status">Waiting for peer to join...</div></div>
       </div>
       <div class="actions">
         <button class="btn-secondary" type="button" onclick="copyInvite()">Copy Invite Link</button>
@@ -115,12 +140,19 @@
     let peer = null, dataConn = null, mediaCall = null, incomingCallObj = null, localStream = null;
     let myName = "Anon", roomCode = "", isHost = false;
 
+    // iOS Safari changes the visual viewport when its keyboard opens. Keep the
+    // chat composer inside the visible area instead of underneath the keyboard.
+    function updateAppHeight() {
+      if (window.visualViewport) document.documentElement.style.setProperty("--app-height", window.visualViewport.height + "px");
+    }
+    updateAppHeight();
+    window.addEventListener("resize", updateAppHeight);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", updateAppHeight);
+
     window.addEventListener("DOMContentLoaded", function () {
       const code = new URLSearchParams(window.location.search).get("room");
       if (code) document.getElementById("join-code").value = code.toUpperCase();
-      document.getElementById("join-code").addEventListener("input", function () {
-        this.value = this.value.toUpperCase();
-      });
+      document.getElementById("join-code").addEventListener("input", function () { this.value = this.value.toUpperCase(); });
     });
 
     function getAlias() {
@@ -152,12 +184,8 @@
       document.getElementById("lobby").style.display = "none";
       document.getElementById("room").style.display = "flex";
       document.getElementById("display-code").textContent = roomCode;
-      try {
-        peer = new Peer(isHost ? roomCode : undefined);
-      } catch (err) {
-        addSystemMsg("Could not start the connection: " + err.message);
-        return;
-      }
+      try { peer = new Peer(isHost ? roomCode : undefined); }
+      catch (err) { addSystemMsg("Could not start the connection: " + err.message); return; }
       peer.on("open", function () {
         addSystemMsg("Connected as " + myName + ". Share Room ID: " + roomCode);
         if (!isHost) setupDataConn(peer.connect(roomCode, { metadata: { name: myName }, reliable: true }));
@@ -200,7 +228,7 @@
         document.getElementById("peer-status").textContent = "Peer disconnected";
         document.getElementById("conn-dot").classList.add("offline");
         addSystemMsg("Peer left the room.");
-        dataConn = null;
+        if (dataConn === conn) dataConn = null;
       });
       conn.on("error", function () { addSystemMsg("The peer connection encountered an error."); });
     }
@@ -210,10 +238,7 @@
       const input = document.getElementById("msg-input");
       const text = input.value.trim();
       if (!text) return;
-      if (!dataConn || !dataConn.open) {
-        addSystemMsg("No peer is connected yet. Your message was not sent.");
-        return;
-      }
+      if (!dataConn || !dataConn.open) { addSystemMsg("No peer is connected yet. Your message was not sent."); return; }
       appendMsg(myName, text, "me");
       dataConn.send({ type: "chat", sender: myName, text: text });
       input.value = "";
@@ -224,29 +249,20 @@
       const box = document.getElementById("messages");
       const div = document.createElement("div");
       div.className = "msg " + cls;
-      const name = document.createElement("div");
-      name.className = "msg-sender";
-      name.textContent = sender;
-      const body = document.createElement("div");
-      body.textContent = text;
-      div.appendChild(name);
-      div.appendChild(body);
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
+      const name = document.createElement("div"); name.className = "msg-sender"; name.textContent = sender;
+      const body = document.createElement("div"); body.textContent = text;
+      div.appendChild(name); div.appendChild(body); box.appendChild(div); box.scrollTop = box.scrollHeight;
     }
 
     function addSystemMsg(text) {
       const box = document.getElementById("messages");
-      const div = document.createElement("div");
-      div.className = "msg sys";
-      div.textContent = text;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
+      const div = document.createElement("div"); div.className = "msg sys"; div.textContent = text;
+      box.appendChild(div); box.scrollTop = box.scrollHeight;
     }
 
     function getMedia(constraints) {
       if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        return Promise.reject(new Error("Microphone and camera require this page to be opened over HTTPS in a supported browser."));
+        return Promise.reject(new Error("Microphone and camera require HTTPS and a supported browser. Open this site using its secure HTTPS address."));
       }
       return navigator.mediaDevices.getUserMedia(constraints);
     }
@@ -260,28 +276,18 @@
         const call = peer.call(dataConn.peer, localStream, { metadata: { name: myName, video: !!withVideo } });
         if (!call) throw new Error("Could not create the call.");
         bindMediaCall(call);
-      } catch (err) {
-        stopLocalStream();
-        alert("Could not access the microphone or camera: " + err.message);
-      }
+      } catch (err) { stopLocalStream(); alert("Could not access the microphone or camera: " + err.message); }
     }
 
     async function acceptCall() {
       document.getElementById("incoming-banner").style.display = "none";
       if (!incomingCallObj) return;
-      const call = incomingCallObj;
-      incomingCallObj = null;
+      const call = incomingCallObj; incomingCallObj = null;
       const withVideo = !!(call.metadata && call.metadata.video);
       try {
         localStream = await getMedia({ audio: true, video: withVideo });
-        showCallStage(localStream);
-        call.answer(localStream);
-        bindMediaCall(call);
-      } catch (err) {
-        call.close();
-        stopLocalStream();
-        alert("Could not access the microphone or camera: " + err.message);
-      }
+        showCallStage(localStream); call.answer(localStream); bindMediaCall(call);
+      } catch (err) { call.close(); stopLocalStream(); alert("Could not access the microphone or camera: " + err.message); }
     }
 
     function rejectCall() {
@@ -296,9 +302,7 @@
         const video = document.getElementById("remote-video");
         video.srcObject = remoteStream;
         const playResult = video.play();
-        if (playResult && typeof playResult.catch === "function") {
-          playResult.catch(function () { addSystemMsg("Tap the remote video to start playback."); });
-        }
+        if (playResult && typeof playResult.catch === "function") playResult.catch(function () { addSystemMsg("Tap the remote video to start playback."); });
       });
       call.on("close", function () { endCall(false); });
       call.on("error", function () { addSystemMsg("The call encountered a connection error."); endCall(false); });
@@ -306,8 +310,7 @@
 
     function showCallStage(stream) {
       document.getElementById("call-stage").style.display = "flex";
-      const video = document.getElementById("local-video");
-      video.srcObject = stream;
+      const video = document.getElementById("local-video"); video.srcObject = stream;
       const playResult = video.play();
       if (playResult && typeof playResult.catch === "function") playResult.catch(function () {});
     }
@@ -319,8 +322,7 @@
 
     function endCall(closePeerCall) {
       const shouldClose = closePeerCall !== false;
-      const call = mediaCall;
-      mediaCall = null;
+      const call = mediaCall; mediaCall = null;
       if (shouldClose && call) call.close();
       stopLocalStream();
       document.getElementById("call-stage").style.display = "none";
@@ -333,41 +335,27 @@
     function toggleMute() {
       if (!localStream) return;
       const track = localStream.getAudioTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        document.getElementById("mute-btn").textContent = track.enabled ? "Mute Mic" : "Unmute Mic";
-      }
+      if (track) { track.enabled = !track.enabled; document.getElementById("mute-btn").textContent = track.enabled ? "Mute Mic" : "Unmute Mic"; }
     }
 
     function toggleCam() {
       if (!localStream) return;
       const track = localStream.getVideoTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        document.getElementById("cam-btn").textContent = track.enabled ? "Turn Camera Off" : "Turn Camera On";
-      }
+      if (track) { track.enabled = !track.enabled; document.getElementById("cam-btn").textContent = track.enabled ? "Turn Camera Off" : "Turn Camera On"; }
     }
 
     async function copyInvite() {
       const url = window.location.origin + window.location.pathname + "?room=" + encodeURIComponent(roomCode);
       try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(url);
-        } else {
-          const temp = document.createElement("textarea");
-          temp.value = url;
-          temp.style.position = "fixed";
-          temp.style.opacity = "0";
-          document.body.appendChild(temp);
-          temp.select();
-          const copied = document.execCommand("copy");
-          document.body.removeChild(temp);
+        if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(url);
+        else {
+          const temp = document.createElement("textarea"); temp.value = url;
+          temp.style.position = "fixed"; temp.style.opacity = "0"; document.body.appendChild(temp);
+          temp.select(); const copied = document.execCommand("copy"); document.body.removeChild(temp);
           if (!copied) throw new Error("Clipboard access was denied.");
         }
         addSystemMsg("Invite link copied to clipboard.");
-      } catch (err) {
-        prompt("Copy this invite link:", url);
-      }
+      } catch (err) { prompt("Copy this invite link:", url); }
     }
 
     function leaveRoom() {
