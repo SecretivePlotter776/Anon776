@@ -1,0 +1,1790 @@
+```html
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnonLink — Standalone Numberless Chat & Calls</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- PeerJS for Zero-Backend Direct WebRTC P2P Connections -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.5);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      70% { transform: scale(1.25); opacity: 0; }
+      100% { transform: scale(0.95); opacity: 0; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .typing-dot {
+      animation: typingBounce 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes typingBounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200 overflow-hidden h-screen flex flex-col">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- INCOMING CALL MODAL BANNER -->
+  <div id="incoming-call-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-5">
+      <div class="relative mx-auto w-20 h-20 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full bg-emerald-500/30 animate-pulse-ring"></div>
+        <div id="incoming-caller-avatar" class="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xl font-bold shadow-lg relative z-10">
+          ?
+        </div>
+      </div>
+      <div>
+        <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          Incoming Encrypted Call
+        </span>
+        <h3 id="incoming-caller-name" class="text-lg font-bold mt-2">Peer</h3>
+        <p id="incoming-call-type-text" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">is inviting you to a video call...</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3 pt-1">
+        <button id="decline-call-btn" type="button" class="py-3 px-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-semibold text-xs flex items-center justify-center gap-2 transition">
+          <i data-lucide="phone-off" class="w-4 h-4"></i>
+          <span>Decline</span>
+        </button>
+        <button id="accept-call-btn" type="button" class="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition">
+          <i data-lucide="phone-call" class="w-4 h-4"></i>
+          <span>Accept</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY VIEW (100% Standalone, Zero Login, No Phone Number) -->
+  <main id="lobby-view" class="flex-1 flex flex-col justify-between overflow-y-auto p-4 sm:p-8">
+    <!-- Top Navbar -->
+    <header class="max-w-6xl w-full mx-auto flex items-center justify-between py-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/25">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <span class="font-bold text-xl tracking-tight">AnonLink</span>
+          <span class="ml-2 text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">No Login • No Number</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-slate-200/70 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>100% Client-Side P2P Ready</span>
+        </div>
+        <button id="theme-toggle-lobby" aria-label="Toggle theme" class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition shadow-sm">
+          <i data-lucide="sun" class="w-5 h-5 hidden dark:block text-amber-400"></i>
+          <i data-lucide="moon" class="w-5 h-5 block dark:hidden text-slate-700"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Center Hero & Room Card -->
+    <section class="max-w-5xl w-full mx-auto my-auto py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <!-- Left Info Column -->
+      <div class="lg:col-span-6 space-y-6 text-center lg:text-left">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-xs font-medium">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+          <span>Zero-Account • Direct WebRTC P2P • Works Anywhere</span>
+        </div>
+
+        <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+          Chat & Call Freely.<br />
+          <span class="bg-clip-text text-transparent bg-gradient-to-r from-brand-500 via-indigo-400 to-purple-500">Zero Phone Numbers.</span>
+        </h1>
+
+        <p class="text-slate-600 dark:text-slate-400 text-base sm:text-lg max-w-xl mx-auto lg:mx-0 leading-relaxed">
+          Open directly in any browser with zero sign-ups, zero logins, and no server storage. Create a 6-character Room Code and share your link to connect peer-to-peer for instant messaging, voice calls, and HD video.
+        </p>
+
+        <div class="grid grid-cols-3 gap-3 pt-2 max-w-md mx-auto lg:mx-0">
+          <div class="p-3 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 text-center">
+            <i data-lucide="user-x" class="w-5 h-5 mx-auto mb-1 text-brand-500"></i>
+            <p class="text-xs font-semibold">No Login / SIM</p>
+          </div>
+          <div class="p-3 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 text-center">
+            <i data-lucide="video" class="w-5 h-5 mx-auto mb-1 text-purple-500"></i>
+            <p class="text-xs font-semibold">P2P Video & Voice</p>
+          </div>
+          <div class="p-3 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 text-center">
+            <i data-lucide="zap" class="w-5 h-5 mx-auto mb-1 text-emerald-500"></i>
+            <p class="text-xs font-semibold">Instant Link</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Action Card -->
+      <div class="lg:col-span-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 dark:shadow-black/40">
+          <!-- Mode Tabs -->
+          <div class="grid grid-cols-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 mb-6">
+            <button id="tab-create" type="button" class="py-2.5 text-sm font-semibold rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition">
+              Create New Room
+            </button>
+            <button id="tab-join" type="button" class="py-2.5 text-sm font-semibold rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+              Join Existing Room
+            </button>
+          </div>
+
+          <form id="room-entry-form" class="space-y-5">
+            <!-- Display Alias & Avatar Color -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="display-name-input" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Your Temporary Handle
+                </label>
+                <button type="button" id="randomize-name-btn" class="text-xs text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 font-medium">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Randomize
+                </button>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <div id="lobby-avatar-preview" class="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
+                  SF
+                </div>
+                <div class="relative flex-1">
+                  <i data-lucide="at-sign" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input
+                    id="display-name-input"
+                    type="text"
+                    maxlength="24"
+                    required
+                    placeholder="e.g., SwiftFalcon, NeonPanda"
+                    class="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm font-medium"
+                  />
+                </div>
+              </div>
+              <!-- Quick Avatar Color Swatches -->
+              <div class="flex items-center gap-2 mt-2.5">
+                <span class="text-[11px] text-slate-500 dark:text-slate-400 mr-1">Badge Color:</span>
+                <div id="color-swatches" class="flex items-center gap-1.5"></div>
+              </div>
+            </div>
+
+            <!-- Room Code Section -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="room-id-input" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Room Code
+                </label>
+                <button type="button" id="generate-room-btn" class="text-xs text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 font-medium">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> New Code
+                </button>
+              </div>
+              <div class="relative flex items-center gap-2">
+                <div class="relative flex-1">
+                  <i data-lucide="hash" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input
+                    id="room-id-input"
+                    type="text"
+                    maxlength="16"
+                    required
+                    placeholder="ANON-XXXXXX"
+                    class="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono text-sm uppercase tracking-wider"
+                  />
+                </div>
+                <button type="button" id="copy-lobby-code-btn" title="Copy Room Code" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition">
+                  <i data-lucide="copy" class="w-5 h-5"></i>
+                </button>
+                <button type="button" id="copy-lobby-link-btn" title="Copy Invite Link" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition">
+                  <i data-lucide="link" class="w-5 h-5"></i>
+                </button>
+              </div>
+              <p id="room-hint-text" class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                Create a room and share the code or link—no sign-in required.
+              </p>
+            </div>
+
+            <!-- Join Mode Selection -->
+            <div class="pt-1">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                Start With
+              </span>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="cursor-pointer">
+                  <input type="radio" name="joinMode" value="chat" checked class="peer sr-only" />
+                  <div class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 peer-checked:border-brand-500 peer-checked:bg-brand-500/10 flex items-center justify-center gap-2 text-sm font-medium transition">
+                    <i data-lucide="message-square" class="w-4 h-4 text-brand-500"></i>
+                    <span>Text Chat</span>
+                  </div>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="radio" name="joinMode" value="call" class="peer sr-only" />
+                  <div class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 peer-checked:border-brand-500 peer-checked:bg-brand-500/10 flex items-center justify-center gap-2 text-sm font-medium transition">
+                    <i data-lucide="video" class="w-4 h-4 text-purple-500"></i>
+                    <span>Chat + Video Call</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              id="enter-room-submit-btn"
+              class="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition transform active:scale-[0.99]"
+            >
+              <span id="submit-btn-label">Create & Enter Room</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="max-w-6xl w-full mx-auto py-2 text-center text-xs text-slate-500 dark:text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <span>100% Standalone Browser App • No Accounts • No Phone Numbers • No Servers</span>
+      <span class="font-mono text-[11px] opacity-75">WebRTC P2P + Local Tab Sync</span>
+    </footer>
+  </main>
+
+  <!-- ACTIVE ROOM VIEW -->
+  <div id="room-view" class="hidden flex-1 flex flex-col h-screen overflow-hidden">
+    <!-- Room Top Bar -->
+    <header class="h-16 px-3 sm:px-6 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 z-20">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-white shrink-0">
+          <i data-lucide="shield" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h2 id="active-room-title" class="font-mono font-bold text-sm sm:text-base tracking-wide truncate">ANON-XXXXXX</h2>
+            <span id="connection-status-pill" class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <span id="connection-status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+              <span id="connection-status-text">Waiting for peer...</span>
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 truncate">
+            You: <span id="active-user-alias" class="font-semibold text-slate-700 dark:text-slate-200">User</span> • Zero-Number P2P
+          </p>
+        </div>
+      </div>
+
+      <!-- Room Header Actions -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- Start Voice Call -->
+        <button id="header-voice-call-btn" title="Start Voice Call" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/15 hover:text-emerald-600 dark:hover:text-emerald-400 text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="phone" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Voice Call</span>
+        </button>
+
+        <!-- Start Video Call -->
+        <button id="header-video-call-btn" title="Start Video Call" class="p-2.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 transition flex items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="video" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Video Call</span>
+        </button>
+
+        <!-- Copy Code -->
+        <button id="copy-code-header-btn" title="Copy Room Code" class="hidden sm:flex p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="hash" class="w-4 h-4"></i>
+          <span class="hidden xl:inline">Code</span>
+        </button>
+
+        <!-- Copy Invite Link -->
+        <button id="copy-invite-btn" title="Copy Shareable Invite Link" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="share-2" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Invite Link</span>
+        </button>
+
+        <!-- Participants Drawer Toggle -->
+        <button id="toggle-participants-btn" title="Room Info & Peers" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span id="participant-count-badge" class="px-1.5 py-0.2 rounded-full bg-brand-600 text-white text-[10px]">1</span>
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="theme-toggle-room" aria-label="Toggle theme" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+          <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+          <i data-lucide="moon" class="w-4 h-4 block dark:hidden text-slate-700"></i>
+        </button>
+
+        <!-- Leave Room -->
+        <button id="leave-room-btn" title="Leave Room" class="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-600 dark:text-rose-400 transition flex items-center gap-1.5 text-xs font-semibold">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Leave</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Area -->
+    <div class="flex-1 flex overflow-hidden relative">
+      <!-- Left/Center Area: Call Stage + Chat Feed -->
+      <div class="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-slate-950">
+
+        <!-- COLLAPSIBLE VOICE / VIDEO CALL STAGE -->
+        <section id="call-stage" class="hidden bg-slate-900 border-b border-slate-800 p-3 sm:p-4 shrink-0 transition-all">
+          <div class="max-w-5xl mx-auto flex flex-col gap-3">
+            <!-- Call Top Info Bar -->
+            <div class="flex items-center justify-between text-xs text-slate-300">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="call-mode-label" class="font-semibold text-white">Direct P2P WebRTC Call</span>
+                <span id="call-timer" class="font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md">00:00</span>
+              </div>
+              <span id="media-permission-note" class="text-[11px] text-slate-400 hidden sm:inline">Encrypted peer-to-peer media stream</span>
+            </div>
+
+            <!-- Video / Avatar Grid -->
+            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[44vh] min-h-[195px]">
+              <!-- Local User Tile -->
+              <div class="relative rounded-2xl bg-slate-800 border border-slate-700/80 overflow-hidden flex items-center justify-center aspect-video sm:aspect-auto sm:h-56 shadow-inner">
+                <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover hidden"></video>
+                <div id="local-avatar-placeholder" class="flex flex-col items-center justify-center gap-2 p-4">
+                  <div class="relative">
+                    <div id="local-speaking-ring" class="absolute inset-0 rounded-full bg-brand-500/40 animate-pulse-ring hidden"></div>
+                    <div id="local-call-avatar" class="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg relative z-10">
+                      U
+                    </div>
+                  </div>
+                  <span id="local-call-name" class="text-xs font-semibold text-slate-200">You</span>
+                </div>
+
+                <!-- Tile Overlay Badges -->
+                <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                  <span class="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white text-[11px] font-medium flex items-center gap-1.5">
+                    <span id="local-tile-label">You</span>
+                    <span id="screen-share-badge" class="hidden px-1.5 py-0.2 rounded bg-amber-500 text-black font-bold text-[9px] uppercase">Screen</span>
+                  </span>
+                  <span id="local-mic-indicator" class="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-emerald-400">
+                    <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Remote Peer Tile -->
+              <div id="remote-stage-tile" class="relative rounded-2xl bg-slate-800/90 border border-slate-700/70 overflow-hidden flex items-center justify-center aspect-video sm:aspect-auto sm:h-56">
+                <video id="remote-video" autoplay playsinline class="w-full h-full object-cover hidden"></video>
+                <div id="remote-participants-visual" class="flex flex-col items-center justify-center gap-2 p-4 text-center">
+                  <div id="remote-avatars-cluster" class="flex -space-x-3 justify-center">
+                    <div class="w-14 h-14 rounded-full bg-slate-700 border-2 border-slate-800 flex items-center justify-center text-slate-300">
+                      <i data-lucide="radio" class="w-6 h-6 animate-pulse text-brand-400"></i>
+                    </div>
+                  </div>
+                  <p id="remote-stage-status" class="text-xs font-medium text-slate-300">Waiting for peer media stream...</p>
+                  <p class="text-[11px] text-slate-500">Share your invite link or test with Echo Bot</p>
+                </div>
+                <div id="remote-tile-badge" class="hidden absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
+                  Remote Peer
+                </div>
+              </div>
+            </div>
+
+            <!-- Call Controls Toolbar -->
+            <div class="flex items-center justify-center gap-2 sm:gap-3 pt-1">
+              <button id="toggle-mic-btn" type="button" title="Toggle Microphone" class="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition flex items-center gap-2 text-xs font-medium">
+                <i data-lucide="mic" class="w-4 h-4 text-emerald-400"></i>
+                <span class="hidden sm:inline">Mic On</span>
+              </button>
+
+              <button id="toggle-cam-btn" type="button" title="Toggle Camera" class="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition flex items-center gap-2 text-xs font-medium">
+                <i data-lucide="video" class="w-4 h-4 text-brand-400"></i>
+                <span class="hidden sm:inline">Cam On</span>
+              </button>
+
+              <button id="toggle-screen-btn" type="button" title="Share Screen" class="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition flex items-center gap-2 text-xs font-medium">
+                <i data-lucide="monitor-up" class="w-4 h-4 text-amber-400"></i>
+                <span class="hidden sm:inline">Share Screen</span>
+              </button>
+
+              <button id="end-call-btn" type="button" title="End Call" class="py-3 px-5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 transition flex items-center gap-2">
+                <i data-lucide="phone-off" class="w-4 h-4"></i>
+                <span>End Call</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CHAT MESSAGES FEED -->
+        <div id="messages-container" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          <!-- Privacy & Solo Test Banner inside Chat -->
+          <div class="max-w-xl mx-auto my-2 p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-center shadow-sm space-y-2.5">
+            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-500/10 text-brand-500">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">Zero-Login P2P Room Ready</p>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Messages and calls travel directly peer-to-peer with no phone number or account. Share Room Code <span id="banner-room-code" class="font-mono font-semibold text-brand-600 dark:text-brand-400">ANON-XXXXXX</span> or open another tab to connect instantly.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+              <button id="banner-copy-link-btn" type="button" class="px-3 py-1.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 text-xs font-semibold flex items-center gap-1.5 transition">
+                <i data-lucide="link" class="w-3.5 h-3.5"></i>
+                <span>Copy Invite Link</span>
+              </button>
+              <button id="toggle-echo-bot-btn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition">
+                <i data-lucide="bot" class="w-3.5 h-3.5 text-emerald-500"></i>
+                <span id="echo-bot-btn-label">Test with Echo Bot</span>
+              </button>
+            </div>
+          </div>
+          <!-- Messages render dynamically here -->
+        </div>
+
+        <!-- TYPING INDICATOR -->
+        <div id="typing-indicator-bar" class="hidden px-6 py-1.5 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+          <span id="typing-user-name" class="font-medium">Peer</span>
+          <span>is typing</span>
+          <span class="inline-flex gap-1 items-center">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot"></span>
+          </span>
+        </div>
+
+        <!-- EMOJI PICKER POPOVER -->
+        <div id="emoji-picker-popover" class="hidden mx-4 sm:mx-6 mb-2 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl max-w-xs">
+          <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xs font-semibold text-slate-500">Quick Emojis</span>
+            <button id="close-emoji-btn" type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div id="emoji-grid" class="grid grid-cols-8 gap-1 text-lg"></div>
+        </div>
+
+        <!-- MESSAGE COMPOSER BAR -->
+        <footer class="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+          <form id="chat-form" class="max-w-5xl mx-auto flex items-center gap-2">
+            <button type="button" id="emoji-toggle-btn" title="Insert Emoji" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shrink-0">
+              <i data-lucide="smile" class="w-5 h-5"></i>
+            </button>
+
+            <input
+              id="message-input"
+              type="text"
+              autocomplete="off"
+              maxlength="1000"
+              placeholder="Write an anonymous message..."
+              class="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+            />
+
+            <button type="submit" id="send-message-btn" class="p-3 sm:px-5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-md shadow-brand-500/20 flex items-center gap-2 transition shrink-0">
+              <span class="hidden sm:inline">Send</span>
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </form>
+        </footer>
+      </div>
+
+      <!-- RIGHT SIDEBAR: PARTICIPANTS & ROOM TOOLS -->
+      <aside id="participants-sidebar" class="hidden lg:flex w-76 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex-col shrink-0 z-30 fixed lg:static inset-y-0 right-0 top-16 lg:top-0 shadow-2xl lg:shadow-none w-72">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Room Peers</h3>
+            <p id="sidebar-online-subtitle" class="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">1 in room</p>
+          </div>
+          <button id="close-sidebar-mobile" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div id="participants-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+          <!-- Participant items rendered dynamically -->
+        </div>
+
+        <!-- Solo Testing & Share Room Box -->
+        <div class="p-4 m-3 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Room Code</span>
+            <span id="sidebar-room-code" class="font-mono text-xs font-bold text-brand-600 dark:text-brand-400">ANON-XXXXXX</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="sidebar-copy-code-btn" type="button" class="py-2 px-2.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="hash" class="w-3.5 h-3.5"></i>
+              <span>Code</span>
+            </button>
+            <button id="sidebar-copy-btn" type="button" class="py-2 px-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="link" class="w-3.5 h-3.5"></i>
+              <span>Link</span>
+            </button>
+          </div>
+          <button id="sidebar-echo-btn" type="button" class="w-full py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+            <span id="sidebar-echo-label">Enable Echo Bot Demo</span>
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Standalone Client-Side P2P Application Logic (Zero Firebase, Zero Auth, Zero Backend) -->
+  <script>
+    (function () {
+      // --- 1. CONSTANTS & STATE ---
+      const AVATAR_GRADIENTS = [
+        'from-indigo-500 to-purple-600',
+        'from-emerald-500 to-teal-600',
+        'from-rose-500 to-pink-600',
+        'from-amber-500 to-orange-600',
+        'from-cyan-500 to-blue-600',
+        'from-fuchsia-500 to-purple-600'
+      ];
+
+      const ADJECTIVES = ['Swift', 'Neon', 'Cyber', 'Silent', 'Shadow', 'Cosmic', 'Velvet', 'Lunar', 'Solar', 'Phantom'];
+      const NOUNS = ['Falcon', 'Panda', 'Fox', 'Wolf', 'Lynx', 'Raven', 'Orbit', 'Spark', 'Viper', 'Hawk'];
+      const EMOJIS = ['😀', '😂', '🥰', '😎', '🤔', '🙌', '👏', '🔥', '❤️', '💯', '🎉', '🚀', '👀', '✨', '👍', '🤝', '💡', '🛡️', '🎧', '📹', '👋', '🥳', '🤩', '🫡'];
+
+      const state = {
+        localId: 'usr-' + Math.random().toString(36).substring(2, 10),
+        displayName: '',
+        avatarColor: AVATAR_GRADIENTS[0],
+        roomId: '',
+        isHost: false,
+        inRoom: false,
+        echoBotActive: false,
+        // Transport channels
+        bc: null, // BroadcastChannel for same-browser multi-tab instant connection
+        peer: null, // PeerJS instance for cross-device WebRTC P2P
+        dataConns: new Map(), // peerId -> DataConnection
+        mediaConns: new Map(), // peerId -> MediaConnection
+        peers: new Map(), // peerId -> { id, displayName, avatarColor, inCall, callType, transport }
+        // Call state
+        inCall: false,
+        callType: 'video', // 'voice' | 'video'
+        micEnabled: true,
+        camEnabled: true,
+        screenSharing: false,
+        localStream: null,
+        screenStream: null,
+        remoteStream: null,
+        incomingMediaCall: null,
+        incomingCallerMeta: null,
+        callTimerInterval: null,
+        callSeconds: 0,
+        typingTimeout: null,
+        lastTypingSent: 0
+      };
+
+      // --- 2. DOM REFERENCES ---
+      const els = {
+        lobbyView: document.getElementById('lobby-view'),
+        roomView: document.getElementById('room-view'),
+        tabCreate: document.getElementById('tab-create'),
+        tabJoin: document.getElementById('tab-join'),
+        submitBtnLabel: document.getElementById('submit-btn-label'),
+        roomEntryForm: document.getElementById('room-entry-form'),
+        displayNameInput: document.getElementById('display-name-input'),
+        lobbyAvatarPreview: document.getElementById('lobby-avatar-preview'),
+        colorSwatches: document.getElementById('color-swatches'),
+        randomizeNameBtn: document.getElementById('randomize-name-btn'),
+        roomIdInput: document.getElementById('room-id-input'),
+        generateRoomBtn: document.getElementById('generate-room-btn'),
+        copyLobbyCodeBtn: document.getElementById('copy-lobby-code-btn'),
+        copyLobbyLinkBtn: document.getElementById('copy-lobby-link-btn'),
+        roomHintText: document.getElementById('room-hint-text'),
+        // Room Header
+        activeRoomTitle: document.getElementById('active-room-title'),
+        activeUserAlias: document.getElementById('active-user-alias'),
+        connectionStatusPill: document.getElementById('connection-status-pill'),
+        connectionStatusDot: document.getElementById('connection-status-dot'),
+        connectionStatusText: document.getElementById('connection-status-text'),
+        bannerRoomCode: document.getElementById('banner-room-code'),
+        sidebarRoomCode: document.getElementById('sidebar-room-code'),
+        messagesContainer: document.getElementById('messages-container'),
+        typingIndicatorBar: document.getElementById('typing-indicator-bar'),
+        typingUserName: document.getElementById('typing-user-name'),
+        chatForm: document.getElementById('chat-form'),
+        messageInput: document.getElementById('message-input'),
+        emojiToggleBtn: document.getElementById('emoji-toggle-btn'),
+        emojiPickerPopover: document.getElementById('emoji-picker-popover'),
+        closeEmojiBtn: document.getElementById('close-emoji-btn'),
+        emojiGrid: document.getElementById('emoji-grid'),
+        participantsSidebar: document.getElementById('participants-sidebar'),
+        toggleParticipantsBtn: document.getElementById('toggle-participants-btn'),
+        closeSidebarMobile: document.getElementById('close-sidebar-mobile'),
+        participantsList: document.getElementById('participants-list'),
+        participantCountBadge: document.getElementById('participant-count-badge'),
+        sidebarOnlineSubtitle: document.getElementById('sidebar-online-subtitle'),
+        copyCodeHeaderBtn: document.getElementById('copy-code-header-btn'),
+        copyInviteBtn: document.getElementById('copy-invite-btn'),
+        bannerCopyLinkBtn: document.getElementById('banner-copy-link-btn'),
+        sidebarCopyCodeBtn: document.getElementById('sidebar-copy-code-btn'),
+        sidebarCopyBtn: document.getElementById('sidebar-copy-btn'),
+        toggleEchoBotBtn: document.getElementById('toggle-echo-bot-btn'),
+        echoBotBtnLabel: document.getElementById('echo-bot-btn-label'),
+        sidebarEchoBtn: document.getElementById('sidebar-echo-btn'),
+        sidebarEchoLabel: document.getElementById('sidebar-echo-label'),
+        leaveRoomBtn: document.getElementById('leave-room-btn'),
+        // Call UI
+        callStage: document.getElementById('call-stage'),
+        callModeLabel: document.getElementById('call-mode-label'),
+        callTimer: document.getElementById('call-timer'),
+        headerVoiceCallBtn: document.getElementById('header-voice-call-btn'),
+        headerVideoCallBtn: document.getElementById('header-video-call-btn'),
+        localVideo: document.getElementById('local-video'),
+        localAvatarPlaceholder: document.getElementById('local-avatar-placeholder'),
+        localCallAvatar: document.getElementById('local-call-avatar'),
+        localCallName: document.getElementById('local-call-name'),
+        localTileLabel: document.getElementById('local-tile-label'),
+        localMicIndicator: document.getElementById('local-mic-indicator'),
+        localSpeakingRing: document.getElementById('local-speaking-ring'),
+        screenShareBadge: document.getElementById('screen-share-badge'),
+        remoteVideo: document.getElementById('remote-video'),
+        remoteParticipantsVisual: document.getElementById('remote-participants-visual'),
+        remoteAvatarsCluster: document.getElementById('remote-avatars-cluster'),
+        remoteStageStatus: document.getElementById('remote-stage-status'),
+        remoteTileBadge: document.getElementById('remote-tile-badge'),
+        toggleMicBtn: document.getElementById('toggle-mic-btn'),
+        toggleCamBtn: document.getElementById('toggle-cam-btn'),
+        toggleScreenBtn: document.getElementById('toggle-screen-btn'),
+        endCallBtn: document.getElementById('end-call-btn'),
+        // Incoming Call Modal
+        incomingCallModal: document.getElementById('incoming-call-modal'),
+        incomingCallerAvatar: document.getElementById('incoming-caller-avatar'),
+        incomingCallerName: document.getElementById('incoming-caller-name'),
+        incomingCallTypeText: document.getElementById('incoming-call-type-text'),
+        acceptCallBtn: document.getElementById('accept-call-btn'),
+        declineCallBtn: document.getElementById('decline-call-btn')
+      };
+
+      // --- 3. UTILITY FUNCTIONS ---
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        const colors = {
+          info: 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700',
+          success: 'bg-emerald-600 text-white border-emerald-500',
+          warning: 'bg-amber-600 text-white border-amber-500',
+          error: 'bg-rose-600 text-white border-rose-500'
+        };
+        toast.className = `pointer-events-auto px-4 py-2.5 rounded-xl border shadow-lg text-xs font-medium flex items-center gap-2 transition-all duration-300 transform translate-y-0 opacity-100 ${colors[type] || colors.info}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.classList.add('opacity-0', '-translate-y-2');
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      function generateRandomAlias() {
+        const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+        const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+        return `${adj}${noun}`;
+      }
+
+      function generateRoomCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return `ANON-${code}`;
+      }
+
+      function sanitizeRoomId(raw) {
+        const cleaned = raw.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16);
+        return cleaned;
+      }
+
+      function getInviteUrl(roomId) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', roomId);
+        return url.toString();
+      }
+
+      function copyTextToClipboard(text, successMsg = 'Copied to clipboard!') {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          showToast(successMsg, 'success');
+        } catch (err) {
+          showToast('Unable to copy text', 'error');
+        }
+        document.body.removeChild(textarea);
+      }
+
+      function getInitials(name) {
+        return (name || '?').slice(0, 2).toUpperCase();
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function formatMessageWithLinks(text) {
+        const escaped = escapeHtml(text);
+        const urlRegex = /(https?:\/\/[^\s<]+)/g;
+        return escaped.replace(
+          urlRegex,
+          '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline font-medium hover:opacity-80 break-all">$1</a>'
+        );
+      }
+
+      // --- 4. THEME HANDLING ---
+      function toggleTheme() {
+        document.documentElement.classList.toggle('dark');
+        lucide.createIcons();
+      }
+      document.getElementById('theme-toggle-lobby').addEventListener('click', toggleTheme);
+      document.getElementById('theme-toggle-room').addEventListener('click', toggleTheme);
+
+      // --- 5. LOBBY INITIALIZATION & ONBOARDING ---
+      function updateLobbyAvatarPreview() {
+        const name = els.displayNameInput.value.trim() || 'SF';
+        els.lobbyAvatarPreview.textContent = getInitials(name);
+        els.lobbyAvatarPreview.className = `w-11 h-11 rounded-xl bg-gradient-to-br ${state.avatarColor} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm`;
+      }
+
+      function renderColorSwatches() {
+        els.colorSwatches.innerHTML = '';
+        AVATAR_GRADIENTS.forEach((grad) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `w-6 h-6 rounded-full bg-gradient-to-br ${grad} transition transform hover:scale-110 ${
+            state.avatarColor === grad ? 'ring-2 ring-offset-2 ring-brand-500 dark:ring-offset-slate-900 scale-110' : 'opacity-75 hover:opacity-100'
+          }`;
+          btn.addEventListener('click', () => {
+            state.avatarColor = grad;
+            renderColorSwatches();
+            updateLobbyAvatarPreview();
+          });
+          els.colorSwatches.appendChild(btn);
+        });
+      }
+
+      function switchLobbyTab(mode) {
+        if (mode === 'create') {
+          els.tabCreate.className = 'py-2.5 text-sm font-semibold rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition';
+          els.tabJoin.className = 'py-2.5 text-sm font-semibold rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition';
+          els.submitBtnLabel.textContent = 'Create & Enter Room';
+          els.roomHintText.textContent = 'Create a room and share the code or link—no sign-in required.';
+          if (!els.roomIdInput.value) els.roomIdInput.value = generateRoomCode();
+        } else {
+          els.tabJoin.className = 'py-2.5 text-sm font-semibold rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition';
+          els.tabCreate.className = 'py-2.5 text-sm font-semibold rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition';
+          els.submitBtnLabel.textContent = 'Join Private Room';
+          els.roomHintText.textContent = 'Enter a 6-character Room Code shared with you to connect immediately.';
+        }
+      }
+
+      function initLobby() {
+        els.displayNameInput.value = generateRandomAlias();
+        state.avatarColor = AVATAR_GRADIENTS[Math.floor(Math.random() * AVATAR_GRADIENTS.length)];
+        renderColorSwatches();
+        updateLobbyAvatarPreview();
+
+        const params = new URLSearchParams(window.location.search);
+        const urlRoom = params.get('room');
+        if (urlRoom) {
+          els.roomIdInput.value = sanitizeRoomId(urlRoom);
+          switchLobbyTab('join');
+        } else {
+          els.roomIdInput.value = generateRoomCode();
+          switchLobbyTab('create');
+        }
+      }
+
+      els.displayNameInput.addEventListener('input', updateLobbyAvatarPreview);
+      els.tabCreate.addEventListener('click', () => switchLobbyTab('create'));
+      els.tabJoin.addEventListener('click', () => switchLobbyTab('join'));
+      els.randomizeNameBtn.addEventListener('click', () => {
+        els.displayNameInput.value = generateRandomAlias();
+        updateLobbyAvatarPreview();
+      });
+      els.generateRoomBtn.addEventListener('click', () => {
+        els.roomIdInput.value = generateRoomCode();
+      });
+      els.copyLobbyCodeBtn.addEventListener('click', () => {
+        const code = sanitizeRoomId(els.roomIdInput.value) || generateRoomCode();
+        els.roomIdInput.value = code;
+        copyTextToClipboard(code, `Room code ${code} copied!`);
+      });
+      els.copyLobbyLinkBtn.addEventListener('click', () => {
+        const code = sanitizeRoomId(els.roomIdInput.value) || generateRoomCode();
+        els.roomIdInput.value = code;
+        copyTextToClipboard(getInviteUrl(code), `Invite link for ${code} copied!`);
+      });
+
+      // --- 6. DUAL P2P TRANSPORT LAYER (BroadcastChannel + PeerJS WebRTC) ---
+      function broadcastPacket(packet) {
+        // 1. Send via BroadcastChannel (instant same-browser multi-tab support, works even offline)
+        if (state.bc) {
+          try {
+            state.bc.postMessage(packet);
+          } catch (e) {}
+        }
+        // 2. Send via all active PeerJS WebRTC DataConnections (cross-device over internet)
+        state.dataConns.forEach((conn) => {
+          if (conn && conn.open) {
+            try {
+              conn.send(packet);
+            } catch (e) {}
+          }
+        });
+      }
+
+      function handleIncomingPacket(packet, sourceTransport = 'p2p') {
+        if (!packet || !packet.type || packet.senderId === state.localId) return;
+
+        switch (packet.type) {
+          case 'HELLO': {
+            const isNewPeer = !state.peers.has(packet.senderId);
+            state.peers.set(packet.senderId, {
+              id: packet.senderId,
+              displayName: packet.displayName,
+              avatarColor: packet.avatarColor,
+              inCall: !!packet.inCall,
+              callType: packet.callType || 'video',
+              transport: sourceTransport
+            });
+            updateConnectionUI();
+            renderParticipantsSidebar();
+            updateRemoteCallStage();
+
+            if (isNewPeer) {
+              appendSystemMessage(`${packet.displayName} connected to room`);
+              // Reply with our own HELLO so both sides sync immediately
+              broadcastPacket({
+                type: 'HELLO',
+                senderId: state.localId,
+                displayName: state.displayName,
+                avatarColor: state.avatarColor,
+                inCall: state.inCall,
+                callType: state.callType
+              });
+            }
+            break;
+          }
+
+          case 'PRESENCE_UPDATE': {
+            if (state.peers.has(packet.senderId)) {
+              const existing = state.peers.get(packet.senderId);
+              existing.inCall = !!packet.inCall;
+              existing.callType = packet.callType || 'video';
+              state.peers.set(packet.senderId, existing);
+              renderParticipantsSidebar();
+              updateRemoteCallStage();
+            }
+            break;
+          }
+
+          case 'BYE': {
+            if (state.peers.has(packet.senderId)) {
+              const peerInfo = state.peers.get(packet.senderId);
+              state.peers.delete(packet.senderId);
+              appendSystemMessage(`${peerInfo.displayName} left the room`);
+              updateConnectionUI();
+              renderParticipantsSidebar();
+              updateRemoteCallStage();
+            }
+            break;
+          }
+
+          case 'CHAT': {
+            hideTypingIndicator();
+            appendChatMessage({
+              senderId: packet.senderId,
+              senderName: packet.senderName,
+              avatarColor: packet.avatarColor,
+              text: packet.text,
+              createdAt: packet.createdAt || Date.now()
+            });
+            break;
+          }
+
+          case 'TYPING': {
+            showTypingIndicator(packet.senderName);
+            break;
+          }
+
+          case 'CALL_SIGNAL': {
+            if (packet.action === 'ring' && !state.inCall) {
+              state.incomingCallerMeta = {
+                senderId: packet.senderId,
+                senderName: packet.senderName,
+                avatarColor: packet.avatarColor,
+                callType: packet.callType || 'video'
+              };
+              showIncomingCallBanner(state.incomingCallerMeta);
+            } else if (packet.action === 'decline') {
+              showToast(`${packet.senderName} declined the call`, 'info');
+            } else if (packet.action === 'end') {
+              appendSystemMessage(`${packet.senderName} ended the call`);
+              clearRemoteMediaDisplay();
+            }
+            break;
+          }
+        }
+      }
+
+      function setupBroadcastChannel(roomCode) {
+        if (state.bc) {
+          state.bc.close();
+        }
+        try {
+          state.bc = new BroadcastChannel(`anonlink_room_${roomCode}`);
+          state.bc.onmessage = (event) => {
+            handleIncomingPacket(event.data, 'local-tab');
+          };
+          // Announce presence to any other open tabs in this room
+          broadcastPacket({
+            type: 'HELLO',
+            senderId: state.localId,
+            displayName: state.displayName,
+            avatarColor: state.avatarColor,
+            inCall: state.inCall,
+            callType: state.callType
+          });
+        } catch (err) {
+          console.warn('BroadcastChannel unavailable:', err);
+        }
+      }
+
+      function setupPeerJS(roomCode) {
+        if (typeof Peer === 'undefined') {
+          updateConnectionUI();
+          return;
+        }
+
+        // Clean room code to valid PeerJS ID format
+        const cleanRoom = roomCode.replace(/[^A-Z0-9]/g, '');
+        const hostPeerId = `anonlink-v1-${cleanRoom}-host`;
+
+        // Try registering as the room host ID first; if taken, join as a guest peer and connect to host
+        const peerInstance = new Peer(hostPeerId, { debug: 0 });
+        state.peer = peerInstance;
+
+        peerInstance.on('open', () => {
+          state.isHost = true;
+          updateConnectionUI();
+        });
+
+        peerInstance.on('connection', (conn) => {
+          wireDataConnection(conn);
+        });
+
+        peerInstance.on('call', (mediaCall) => {
+          handleIncomingWebRTCMediaCall(mediaCall);
+        });
+
+        peerInstance.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            // Host ID already exists -> connect as guest peer to host!
+            peerInstance.destroy();
+            connectAsGuestPeer(hostPeerId);
+          } else {
+            // Fallback gracefully to BroadcastChannel / local mode without showing scary errors
+            updateConnectionUI();
+          }
+        });
+      }
+
+      function connectAsGuestPeer(hostPeerId) {
+        if (typeof Peer === 'undefined') return;
+        const guestPeer = new Peer(undefined, { debug: 0 });
+        state.peer = guestPeer;
+        state.isHost = false;
+
+        guestPeer.on('open', () => {
+          const conn = guestPeer.connect(hostPeerId, { reliable: true });
+          wireDataConnection(conn);
+          updateConnectionUI();
+        });
+
+        guestPeer.on('connection', (conn) => {
+          wireDataConnection(conn);
+        });
+
+        guestPeer.on('call', (mediaCall) => {
+          handleIncomingWebRTCMediaCall(mediaCall);
+        });
+
+        guestPeer.on('error', () => {
+          updateConnectionUI();
+        });
+      }
+
+      function wireDataConnection(conn) {
+        conn.on('open', () => {
+          state.dataConns.set(conn.peer, conn);
+          conn.send({
+            type: 'HELLO',
+            senderId: state.localId,
+            displayName: state.displayName,
+            avatarColor: state.avatarColor,
+            inCall: state.inCall,
+            callType: state.callType
+          });
+          updateConnectionUI();
+        });
+
+        conn.on('data', (data) => {
+          handleIncomingPacket(data, 'webrtc-p2p');
+        });
+
+        conn.on('close', () => {
+          state.dataConns.delete(conn.peer);
+          updateConnectionUI();
+        });
+      }
+
+      function updateConnectionUI() {
+        const peerCount = state.peers.size + (state.echoBotActive ? 1 : 0);
+        if (peerCount > 0) {
+          els.connectionStatusPill.className = 'inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+          els.connectionStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+          els.connectionStatusText.textContent = 'Connected P2P';
+        } else {
+          els.connectionStatusPill.className = 'inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400';
+          els.connectionStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
+          els.connectionStatusText.textContent = 'Waiting for peer...';
+        }
+      }
+
+      // --- 7. ENTERING & LEAVING ROOMS ---
+      function enterRoom(e) {
+        e.preventDefault();
+        const alias = els.displayNameInput.value.trim() || generateRandomAlias();
+        const roomCode = sanitizeRoomId(els.roomIdInput.value) || generateRoomCode();
+        const joinMode = document.querySelector('input[name="joinMode"]:checked')?.value || 'chat';
+
+        state.displayName = alias;
+        state.roomId = roomCode;
+        state.inRoom = true;
+        state.peers.clear();
+        state.dataConns.clear();
+        state.mediaConns.clear();
+
+        // Update URL query param cleanly without reload
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('room', roomCode);
+          window.history.replaceState({}, '', url);
+        } catch (err) {}
+
+        // Update Room UI labels
+        els.activeRoomTitle.textContent = roomCode;
+        els.activeUserAlias.textContent = alias;
+        els.bannerRoomCode.textContent = roomCode;
+        els.sidebarRoomCode.textContent = roomCode;
+        els.localCallAvatar.textContent = getInitials(alias);
+        els.localCallAvatar.className = `w-16 h-16 rounded-full bg-gradient-to-br ${state.avatarColor} flex items-center justify-center text-white text-xl font-bold shadow-lg relative z-10`;
+        els.localCallName.textContent = alias;
+        els.localTileLabel.textContent = `${alias} (You)`;
+
+        // Reset messages area keeping privacy banner
+        const banner = els.messagesContainer.firstElementChild;
+        els.messagesContainer.innerHTML = '';
+        if (banner) els.messagesContainer.appendChild(banner);
+
+        // Switch screens
+        els.lobbyView.classList.add('hidden');
+        els.roomView.classList.remove('hidden');
+        lucide.createIcons();
+
+        // Initialize P2P & Tab channels
+        setupBroadcastChannel(roomCode);
+        setupPeerJS(roomCode);
+        renderParticipantsSidebar();
+        updateConnectionUI();
+
+        if (joinMode === 'call') {
+          startCall('video');
+        }
+      }
+
+      function leaveRoom() {
+        if (state.inCall) {
+          stopCall(false);
+        }
+
+        broadcastPacket({
+          type: 'BYE',
+          senderId: state.localId,
+          displayName: state.displayName
+        });
+
+        if (state.bc) {
+          state.bc.close();
+          state.bc = null;
+        }
+        if (state.peer) {
+          state.peer.destroy();
+          state.peer = null;
+        }
+
+        state.peers.clear();
+        state.dataConns.clear();
+        state.mediaConns.clear();
+        state.inRoom = false;
+        state.echoBotActive = false;
+        updateEchoBotLabels();
+
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('room');
+          window.history.replaceState({}, '', url);
+        } catch (err) {}
+
+        els.roomView.classList.add('hidden');
+        els.lobbyView.classList.remove('hidden');
+        els.roomIdInput.value = generateRoomCode();
+        showToast('Left private room', 'info');
+      }
+
+      els.roomEntryForm.addEventListener('submit', enterRoom);
+      els.leaveRoomBtn.addEventListener('click', leaveRoom);
+      window.addEventListener('beforeunload', () => {
+        if (state.inRoom) {
+          broadcastPacket({ type: 'BYE', senderId: state.localId, displayName: state.displayName });
+        }
+      });
+
+      // --- 8. CHAT MESSAGING, TYPING INDICATOR & ECHO BOT ---
+      function appendSystemMessage(text) {
+        const sysEl = document.createElement('div');
+        sysEl.className = 'flex justify-center my-1';
+        sysEl.innerHTML = `
+          <span class="px-3 py-1 rounded-full bg-slate-200/70 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-[11px] font-medium">
+            ${escapeHtml(text)}
+          </span>
+        `;
+        els.messagesContainer.appendChild(sysEl);
+        els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+      }
+
+      function appendChatMessage({ senderId, senderName, avatarColor, text, createdAt }) {
+        const isMe = senderId === state.localId;
+        const timeStr = new Date(createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const wrapper = document.createElement('div');
+        wrapper.className = `flex items-end gap-2.5 max-w-2xl ${isMe ? 'ml-auto flex-row-reverse' : 'mr-auto'}`;
+
+        const grad = avatarColor || 'from-brand-500 to-purple-600';
+        const initials = getInitials(senderName);
+
+        wrapper.innerHTML = `
+          <div class="w-8 h-8 rounded-full bg-gradient-to-br ${grad} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
+            ${escapeHtml(initials)}
+          </div>
+          <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} min-w-0">
+            <div class="flex items-center gap-2 mb-1 px-1">
+              <span class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">${isMe ? 'You' : escapeHtml(senderName)}</span>
+              <span class="text-[10px] text-slate-400">${timeStr}</span>
+            </div>
+            <div class="px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm ${
+              isMe
+                ? 'bg-brand-600 text-white rounded-br-sm'
+                : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-bl-sm'
+            }">
+              ${formatMessageWithLinks(text)}
+            </div>
+          </div>
+        `;
+        els.messagesContainer.appendChild(wrapper);
+        els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+      }
+
+      function showTypingIndicator(name) {
+        els.typingUserName.textContent = name || 'Peer';
+        els.typingIndicatorBar.classList.remove('hidden');
+        clearTimeout(state.typingTimeout);
+        state.typingTimeout = setTimeout(hideTypingIndicator, 2500);
+      }
+
+      function hideTypingIndicator() {
+        els.typingIndicatorBar.classList.add('hidden');
+      }
+
+      els.messageInput.addEventListener('input', () => {
+        const now = Date.now();
+        if (now - state.lastTypingSent > 1500) {
+          state.lastTypingSent = now;
+          broadcastPacket({
+            type: 'TYPING',
+            senderId: state.localId,
+            senderName: state.displayName
+          });
+        }
+      });
+
+      function handleSendMessage(e) {
+        e.preventDefault();
+        const text = els.messageInput.value.trim();
+        if (!text) return;
+
+        els.messageInput.value = '';
+        els.emojiPickerPopover.classList.add('hidden');
+
+        const msgPayload = {
+          type: 'CHAT',
+          senderId: state.localId,
+          senderName: state.displayName,
+          avatarColor: state.avatarColor,
+          text,
+          createdAt: Date.now()
+        };
+
+        appendChatMessage(msgPayload);
+        broadcastPacket(msgPayload);
+
+        // If Echo Bot solo test mode is active, simulate a realistic P2P reply
+        if (state.echoBotActive) {
+          showTypingIndicator('EchoBot');
+          setTimeout(() => {
+            hideTypingIndicator();
+            const replies = [
+              `Echo: "${text}" — P2P DataChannel verified!`,
+              `Received "${text}" with zero phone number or login required.`,
+              `Loud and clear! Try testing Voice Call or Video Call above too.`
+            ];
+            const replyText = replies[Math.floor(Math.random() * replies.length)];
+            appendChatMessage({
+              senderId: 'echo-bot',
+              senderName: 'EchoBot (Demo)',
+              avatarColor: 'from-emerald-500 to-teal-600',
+              text: replyText,
+              createdAt: Date.now()
+            });
+          }, 900);
+        }
+      }
+
+      els.chatForm.addEventListener('submit', handleSendMessage);
+
+      // Echo Bot Toggle for Single-Device Testing
+      function updateEchoBotLabels() {
+        els.echoBotBtnLabel.textContent = state.echoBotActive ? 'Echo Bot Active' : 'Test with Echo Bot';
+        els.sidebarEchoLabel.textContent = state.echoBotActive ? 'Disable Echo Bot' : 'Enable Echo Bot Demo';
+      }
+
+      function toggleEchoBot() {
+        state.echoBotActive = !state.echoBotActive;
+        updateEchoBotLabels();
+        updateConnectionUI();
+        renderParticipantsSidebar();
+        updateRemoteCallStage();
+        if (state.echoBotActive) {
+          appendSystemMessage('EchoBot joined for solo P2P testing');
+          appendChatMessage({
+            senderId: 'echo-bot',
+            senderName: 'EchoBot (Demo)',
+            avatarColor: 'from-emerald-500 to-teal-600',
+            text: 'Hi! Send any message here to test instant zero-login chat, or share your invite link to connect with a real friend.',
+            createdAt: Date.now()
+          });
+        } else {
+          appendSystemMessage('EchoBot disconnected');
+        }
+      }
+
+      els.toggleEchoBotBtn.addEventListener('click', toggleEchoBot);
+      els.sidebarEchoBtn.addEventListener('click', toggleEchoBot);
+
+      // Emoji Picker
+      EMOJIS.forEach((emoji) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = emoji;
+        btn.className = 'p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition text-center';
+        btn.addEventListener('click', () => {
+          els.messageInput.value += emoji;
+          els.messageInput.focus();
+        });
+        els.emojiGrid.appendChild(btn);
+      });
+
+      els.emojiToggleBtn.addEventListener('click', () => {
+        els.emojiPickerPopover.classList.toggle('hidden');
+      });
+      els.closeEmojiBtn.addEventListener('click', () => {
+        els.emojiPickerPopover.classList.add('hidden');
+      });
+
+      // --- 9. PARTICIPANTS SIDEBAR ---
+      function renderParticipantsSidebar() {
+        const list = [
+          {
+            id: state.localId,
+            displayName: state.displayName,
+            avatarColor: state.avatarColor,
+            inCall: state.inCall,
+            callType: state.callType,
+            isMe: true
+          }
+        ];
+
+        state.peers.forEach((p) => list.push({ ...p, isMe: false }));
+
+        if (state.echoBotActive) {
+          list.push({
+            id: 'echo-bot',
+            displayName: 'EchoBot (Demo)',
+            avatarColor: 'from-emerald-500 to-teal-600',
+            inCall: state.inCall,
+            callType: state.callType,
+            isMe: false
+          });
+        }
+
+        els.participantCountBadge.textContent = list.length;
+        els.sidebarOnlineSubtitle.textContent = `${list.length} ${list.length === 1 ? 'person' : 'people'} in room`;
+
+        els.participantsList.innerHTML = '';
+        list.forEach((u) => {
+          const item = document.createElement('div');
+          item.className = 'p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2';
+          item.innerHTML = `
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="relative shrink-0">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br ${u.avatarColor || 'from-brand-500 to-purple-600'} flex items-center justify-center text-white text-xs font-bold">
+                  ${escapeHtml(getInitials(u.displayName))}
+                </div>
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 absolute bottom-0 right-0"></span>
+              </div>
+              <div class="min-w-0">
+                <p class="text-xs font-semibold truncate text-slate-800 dark:text-slate-100">
+                  ${escapeHtml(u.displayName)} ${u.isMe ? '<span class="text-brand-500">(You)</span>' : ''}
+                </p>
+                <p class="text-[10px] text-slate-500 truncate">
+                  ${u.inCall ? (u.callType === 'video' ? 'In Video Call' : 'In Voice Call') : 'Connected P2P'}
+                </p>
+              </div>
+            </div>
+            ${
+              u.inCall
+                ? `<span class="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0"><i data-lucide="${u.callType === 'video' ? 'video' : 'phone'}" class="w-3.5 h-3.5"></i></span>`
+                : ''
+            }
+          `;
+          els.participantsList.appendChild(item);
+        });
+        lucide.createIcons();
+      }
+
+      els.toggleParticipantsBtn.addEventListener('click', () => {
+        els.participantsSidebar.classList.toggle('hidden');
+        els.participantsSidebar.classList.toggle('flex');
+      });
+      els.closeSidebarMobile.addEventListener('click', () => {
+        els.participantsSidebar.classList.add('hidden');
+        els.participantsSidebar.classList.remove('flex');
+      });
+
+      // Copy Code & Invite Link Handlers
+      const copyRoomCode = () => copyTextToClipboard(state.roomId, `Room code ${state.roomId} copied!`);
+      const copyRoomInvite = () => copyTextToClipboard(getInviteUrl(state.roomId), 'Shareable invite link copied!');
+
+      els.copyCodeHeaderBtn.addEventListener('click', copyRoomCode);
+      els.sidebarCopyCodeBtn.addEventListener('click', copyRoomCode);
+      els.copyInviteBtn.addEventListener('click', copyRoomInvite);
+      els.bannerCopyLinkBtn.addEventListener('click', copyRoomInvite);
+      els.sidebarCopyBtn.addEventListener('click', copyRoomInvite);
+
+      // --- 10. VOICE & VIDEO CALLING ENGINE (WebRTC MediaConnection) ---
+      async function startCall(mode = 'video', isAnswering = false) {
+        state.inCall = true;
+        state.callType = mode;
+        state.micEnabled = true;
+        state.camEnabled = mode === 'video';
+
+        els.callStage.classList.remove('hidden');
+        els.callModeLabel.textContent = mode === 'video' ? 'Direct P2P Video & Voice Call' : 'Direct P2P Voice Call';
+
+        try {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: mode === 'video'
+            });
+            state.localStream = stream;
+            if (mode === 'video') {
+              els.localVideo.srcObject = stream;
+              els.localVideo.classList.remove('hidden');
+              els.localAvatarPlaceholder.classList.add('hidden');
+            } else {
+              els.localVideo.classList.add('hidden');
+              els.localAvatarPlaceholder.classList.remove('hidden');
+              els.localSpeakingRing.classList.remove('hidden');
+            }
+          }
+        } catch (err) {
+          state.camEnabled = false;
+          els.localVideo.classList.add('hidden');
+          els.localAvatarPlaceholder.classList.remove('hidden');
+          els.localSpeakingRing.classList.remove('hidden');
+          showToast('Camera/Mic hardware unavailable — using simulated call stage', 'info');
+        }
+
+        // Initiate WebRTC MediaConnection to any connected PeerJS peers
+        if (state.peer && state.localStream) {
+          state.dataConns.forEach((conn, peerId) => {
+            if (!state.mediaConns.has(peerId)) {
+              try {
+                const call = state.peer.call(peerId, state.localStream, {
+                  metadata: {
+                    senderName: state.displayName,
+                    avatarColor: state.avatarColor,
+                    callType: mode
+                  }
+                });
+                wireMediaConnection(call);
+              } catch (e) {}
+            }
+          });
+        }
+
+        // Notify peers over DataChannel / BroadcastChannel
+        broadcastPacket({
+          type: 'PRESENCE_UPDATE',
+          senderId: state.localId,
+          inCall: true,
+          callType: mode
+        });
+
+        if (!isAnswering) {
+          broadcastPacket({
+            type: 'CALL_SIGNAL',
+            action: 'ring',
+            senderId: state.localId,
+            senderName: state.displayName,
+            avatarColor: state.avatarColor,
+            callType: mode
+          });
+          appendSystemMessage(`${state.displayName} started a ${mode} call`);
+        }
+
+        updateCallControlButtons();
+        startCallTimer();
+        renderParticipantsSidebar();
+        updateRemoteCallStage();
+      }
+
+      function handleIncomingWebRTCMediaCall(mediaCall) {
+        if (state.inCall && state.localStream) {
+          mediaCall.answer(state.localStream);
+          wireMediaConnection(mediaCall);
+          return;
+        }
+        state.incomingMediaCall = mediaCall;
+        const meta = mediaCall.metadata || {};
+        showIncomingCallBanner({
+          senderName: meta.senderName || 'Remote Peer',
+          avatarColor: meta.avatarColor || 'from-emerald-500 to-teal-600',
+          callType: meta.callType || 'video'
+        });
+      }
+
+      function wireMediaConnection(mediaCall) {
+        state.mediaConns.set(mediaCall.peer, mediaCall);
+        mediaCall.on('stream', (remoteStream) => {
+          state.remoteStream = remoteStream;
+          els.remoteVideo.srcObject = remoteStream;
+          els.remoteVideo.classList.remove('hidden');
+          els.remoteParticipantsVisual.classList.add('hidden');
+          els.remoteTileBadge.classList.remove('hidden');
+          const peerName = mediaCall.metadata?.senderName || 'Remote Peer';
+          els.remoteTileBadge.textContent = peerName;
+        });
+
+        mediaCall.on('close', () => {
+          state.mediaConns.delete(mediaCall.peer);
+          clearRemoteMediaDisplay();
+        });
+      }
+
+      function clearRemoteMediaDisplay() {
+        state.remoteStream = null;
+        els.remoteVideo.srcObject = null;
+        els.remoteVideo.classList.add('hidden');
+        els.remoteParticipantsVisual.classList.remove('hidden');
+        els.remoteTileBadge.classList.add('hidden');
+        updateRemoteCallStage();
+      }
+
+      function showIncomingCallBanner(meta) {
+        els.incomingCallerAvatar.textContent = getInitials(meta.senderName);
+        els.incomingCallerAvatar.className = `w-16 h-16 rounded-full bg-gradient-to-br ${meta.avatarColor || 'from-emerald-500 to-teal-600'} flex items-center justify-center text-white text-xl font-bold shadow-lg relative z-10`;
+        els.incomingCallerName.textContent = meta.senderName;
+        els.incomingCallTypeText.textContent = `is inviting you to a ${meta.callType === 'voice' ? 'voice' : 'video'} call...`;
+        els.incomingCallModal.classList.remove('hidden');
+        lucide.createIcons();
+      }
+
+      els.acceptCallBtn.addEventListener('click', async () => {
+        els.incomingCallModal.classList.add('hidden');
+        const mode = state.incomingCallerMeta?.callType || state.incomingMediaCall?.metadata?.callType || 'video';
+        await startCall(mode, true);
+        if (state.incomingMediaCall) {
+          state.incomingMediaCall.answer(state.localStream || undefined);
+          wireMediaConnection(state.incomingMediaCall);
+          state.incomingMediaCall = null;
+        }
+      });
+
+      els.declineCallBtn.addEventListener('click', () => {
+        els.incomingCallModal.classList.add('hidden');
+        if (state.incomingMediaCall) {
+          state.incomingMediaCall.close();
+          state.incomingMediaCall = null;
+        }
+        broadcastPacket({
+          type: 'CALL_SIGNAL',
+          action: 'decline',
+          senderId: state.localId,
+          senderName: state.displayName
+        });
+      });
+
+      function stopCall(notify = true) {
+        state.inCall = false;
+        state.screenSharing = false;
+        clearInterval(state.callTimerInterval);
+        state.callSeconds = 0;
+        els.callTimer.textContent = '00:00';
+
+        state.mediaConns.forEach((mc) => mc.close());
+        state.mediaConns.clear();
+
+        if (state.localStream) {
+          state.localStream.getTracks().forEach((t) => t.stop());
+          state.localStream = null;
+        }
+        if (state.screenStream) {
+          state.screenStream.getTracks().forEach((t) => t.stop());
+          state.screenStream = null;
+        }
+
+        els.localVideo.srcObject = null;
+        els.localVideo.classList.add('hidden');
+        els.localAvatarPlaceholder.classList.remove('hidden');
+        els.localSpeakingRing.classList.add('hidden');
+        els.screenShareBadge.classList.add('hidden');
+        clearRemoteMediaDisplay();
+        els.callStage.classList.add('hidden');
+
+        if (notify && state.inRoom) {
+          broadcastPacket({
+            type: 'PRESENCE_UPDATE',
+            senderId: state.localId,
+            inCall: false,
+            callType: 'video'
+          });
+          broadcastPacket({
+            type: 'CALL_SIGNAL',
+            action: 'end',
+            senderId: state.localId,
+            senderName: state.displayName
+          });
+          appendSystemMessage(`${state.displayName} ended the call`);
+          renderParticipantsSidebar();
+        }
+      }
+
+      function startCallTimer() {
+        clearInterval(state.callTimerInterval);
+        state.callSeconds = 0;
+        state.callTimerInterval = setInterval(() => {
+          state.callSeconds++;
+          const mins = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+          const secs = String(state.callSeconds % 60).padStart(2, '0');
+          els.callTimer.textContent = `${mins}:${secs}`;
+        }, 1000);
+      }
+
+      function updateCallControlButtons() {
+        els.toggleMicBtn.innerHTML = state.micEnabled
+          ? `<i data-lucide="mic" class="w-4 h-4 text-emerald-400"></i><span class="hidden sm:inline">Mic On</span>`
+          : `<i data-lucide="mic-off" class="w-4 h-4 text-rose-400"></i><span class="hidden sm:inline">Muted</span>`;
+
+        els.localMicIndicator.innerHTML = state.micEnabled
+          ? `<i data-lucide="mic" class="w-3.5 h-3.5 text-emerald-400"></i>`
+          : `<i data-lucide="mic-off" class="w-3.5 h-3.5 text-rose-400"></i>`;
+
+        els.toggleCamBtn.innerHTML = state.camEnabled
+          ? `<i data-lucide="video" class="w-4 h-4 text-brand-400"></i><span class="hidden sm:inline">Cam On</span>`
+          : `<i data-lucide="video-off" class="w-4 h-4 text-slate-400"></i><span class="hidden sm:inline">Cam Off</span>`;
+
+        els.toggleScreenBtn.className = state.screenSharing
+          ? 'p-3 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/50 transition flex items-center gap-2 text-xs font-medium'
+          : 'p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition flex items-center gap-2 text-xs font-medium';
+
+        lucide.createIcons();
+      }
+
+      function updateRemoteCallStage() {
+        const peersInCall = [];
+        state.peers.forEach((p) => {
+          if (p.inCall) peersInCall.push(p);
+        });
+        if (state.echoBotActive && state.inCall) {
+          peersInCall.push({
+            displayName: 'EchoBot (Demo)',
+            avatarColor: 'from-emerald-500 to-teal-600'
+          });
+        }
+
+        if (peersInCall.length === 0) {
+          els.remoteAvatarsCluster.innerHTML = `
+            <div class="w-14 h-14 rounded-full bg-slate-700 border-2 border-slate-800 flex items-center justify-center text-slate-300">
+              <i data-lucide="radio" class="w-6 h-6 animate-pulse text-brand-400"></i>
+            </div>
+          `;
+          els.remoteStageStatus.textContent = 'Waiting for peer media stream...';
+        } else {
+          els.remoteAvatarsCluster.innerHTML = peersInCall
+            .map(
+              (p) => `
+              <div class="w-14 h-14 rounded-full bg-gradient-to-br ${p.avatarColor || 'from-brand-500 to-purple-600'} border-2 border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-lg" title="${escapeHtml(p.displayName)}">
+                ${escapeHtml(getInitials(p.displayName))}
+              </div>
+            `
+            )
+            .join('');
+          const names = peersInCall.map((p) => p.displayName).join(', ');
+          els.remoteStageStatus.textContent = `Connected with ${names}`;
+        }
+        lucide.createIcons();
+      }
+
+      els.headerVoiceCallBtn.addEventListener('click', () => startCall('voice'));
+      els.headerVideoCallBtn.addEventListener('click', () => startCall('video'));
+      els.endCallBtn.addEventListener('click', () => stopCall(true));
+
+      els.toggleMicBtn.addEventListener('click', () => {
+        state.micEnabled = !state.micEnabled;
+        if (state.localStream) {
+          state.localStream.getAudioTracks().forEach((track) => (track.enabled = state.micEnabled));
+        }
+        updateCallControlButtons();
+      });
+
+      els.toggleCamBtn.addEventListener('click', async () => {
+        state.camEnabled = !state.camEnabled;
+        if (state.camEnabled) {
+          try {
+            if (!state.localStream || state.localStream.getVideoTracks().length === 0) {
+              const vidStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: state.micEnabled });
+              state.localStream = vidStream;
+            }
+            state.localStream.getVideoTracks().forEach((t) => (t.enabled = true));
+            els.localVideo.srcObject = state.localStream;
+            els.localVideo.classList.remove('hidden');
+            els.localAvatarPlaceholder.classList.add('hidden');
+          } catch (err) {
+            state.camEnabled = false;
+            showToast('Camera permission not available', 'warning');
+          }
+        } else {
+          if (state.localStream) {
+            state.localStream.getVideoTracks().forEach((t) => (t.enabled = false));
+          }
+          els.localVideo.classList.add('hidden');
+          els.localAvatarPlaceholder.classList.remove('hidden');
+        }
+        updateCallControlButtons();
+      });
+
+      els.toggleScreenBtn.addEventListener('click', async () => {
+        if (state.screenSharing) {
+          if (state.screenStream) {
+            state.screenStream.getTracks().forEach((t) => t.stop());
+            state.screenStream = null;
+          }
+          state.screenSharing = false;
+          els.screenShareBadge.classList.add('hidden');
+          if (state.camEnabled && state.localStream) {
+            els.localVideo.srcObject = state.localStream;
+          } else {
+            els.localVideo.classList.add('hidden');
+            els.localAvatarPlaceholder.classList.remove('hidden');
+          }
+          updateCallControlButtons();
+          return;
+        }
+
+        try {
+          if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            state.screenStream = displayStream;
+            state.screenSharing = true;
+            els.localVideo.srcObject = displayStream;
+            els.localVideo.classList.remove('hidden');
+            els.localAvatarPlaceholder.classList.add('hidden');
+            els.screenShareBadge.classList.remove('hidden');
+
+            displayStream.getVideoTracks()[0].onended = () => {
+              state.screenSharing = false;
+              els.screenShareBadge.classList.add('hidden');
+              els.localVideo.classList.add('hidden');
+              els.localAvatarPlaceholder.classList.remove('hidden');
+              updateCallControlButtons();
+            };
+            updateCallControlButtons();
+          } else {
+            showToast('Screen sharing is not supported in this browser view', 'warning');
+          }
+        } catch (err) {
+          showToast('Screen share cancelled or blocked by browser permissions', 'info');
+        }
+      });
+
+      // --- 11. BOOTSTRAP ---
+      lucide.createIcons();
+      initLobby();
+    })();
+  </script>
+</body>
+</html>
+```
